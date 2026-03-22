@@ -1,4 +1,5 @@
 from collections import deque
+from random import shuffle
 from typing import List
 
 from utils import MaxHeap, MinHeap, Node, euclidean_distance
@@ -15,31 +16,51 @@ distance_computations = 0
 
 class NSW:
     def __init__(self, m: int, ef: int) -> None:
+        # number of neighbors for each node
         self.m = m
+        # exploration factor for search (bigger, better, slower)
         self.ef = ef
+        self.nodes: List[Node] = []
+        self.entry_point: Node
 
-    def build(self):
-        # TODO
-        return
+    def build(self, nodes: List[Node]):
+        # Random shuffle means early nodes are scattered
+        # across topics → better long-range coverage → better search.
+        shuffle(nodes)
+        for node in nodes:
+            self.insert(node)
 
-    def insert(self):
-        # TODO
-        return
+    def insert(self, new_node: Node):
+        if len(self.nodes) == 0:
+            self.entry_point = new_node
+            self.nodes.append(new_node)
+            return
 
-    """
-        method that takes a query vector and navigates the graph to
-        find th k closest nodes.
+        if len(self.nodes) < self.m:
+            # connect new_nodes to all existing nodes, bidirectionally
+            for node in self.nodes:
+                new_node.neighbors.append(node)
+                node.neighbors.append(new_node)
+            self.nodes.append(new_node)
+            return
 
-        1. candidates: a min-heap (closest first). "Who should I explore next?" Always the nearest unexplored node.
-        2. results: a max-heap bounded by self.ef. "What are the best nodes I've found?" The max-heap lets you cheaply evict the worst when it overflows ef.
-
-        NOTES:
-            - bigger ef, better recall, more computation.
-    """
+        neighbors = self.search(new_node.vector, [self.entry_point], self.m)
+        for neighbor in neighbors:
+            new_node.neighbors.append(neighbor)
+            neighbor.neighbors.append(new_node)
+        self.nodes.append(new_node)
 
     def search(
         self, query: List[float], entry_points: List[Node], k: int
     ) -> List[Node]:
+        """
+        method that takes a query vector and navigates the graph to
+        find th k closest nodes.
+
+        1. candidates: "Who should I explore next?"
+        2. results: "What are the best nodes I've found?"
+        """
+
         # keyed by dist to query
         candidates = MinHeap()
         # keyed by dist to query, bounded by efSearch
@@ -60,8 +81,11 @@ class NSW:
             closest_node, closest_dist = candidates.pop_min()
             furthest_node, furthest_dist = results.peek_max()
 
+            # this is the clever part, i think.
+            # The logic: if the closest thing left to explore is already worse
+            # than everything in my results, then exploring it
+            # (and its neighbors, which are likely even farther) can't possibly help.
             if closest_dist > furthest_dist:
-                # nothing left can improve the result??
                 break
 
             for neighbor in closest_node.neighbors:
